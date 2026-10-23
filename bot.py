@@ -67,6 +67,7 @@ HELP_TEXT = (
     "<b>Разбор записи</b>\n"
     "Пришли голосовое, аудио или файл с записью кода — вытащу SSID, пароль и токен.\n"
     "Точнее всего разбирается файл: voice Telegram сжимает.\n\n"
+    "Свой xTokenCode: <code>ssid:pass:token</code> или кнопка «С токеном».\n\n"
     "<b>Ограничение</b>\n"
     "Свой (сгенерированный) токен подходит только для подключения к Wi-Fi. "
     "Привязка к аккаунту на серверах Яндекса с ним не сработает — там нужен настоящий "
@@ -95,13 +96,22 @@ class Pair(StatesGroup):
     ssid = State()
     password = State()
     security = State()
+    token = State()
 
 
 # ---------- клавиатуры ----------
 def kb_start() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Пошагово", callback_data="pair:start")],
+        [InlineKeyboardButton(text="С токеном", callback_data="pair:start_token")],
         [InlineKeyboardButton(text="Как это работает", callback_data="pair:help")],
+    ])
+
+
+def kb_token_skip() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Пропустить", callback_data="pair:notoken")],
+        [InlineKeyboardButton(text="Отмена", callback_data="pair:cancel")],
     ])
 
 
@@ -285,7 +295,7 @@ async def finish(message: Message, state: FSMContext) -> None:
         ssid=data.get("ssid", ""),
         password=data.get("password", ""),
         security=security,
-        token=DEFAULT_TOKEN,
+        token=data.get("token") or DEFAULT_TOKEN,
     )
     try:
         await generate_and_send(message, params, state)
@@ -355,12 +365,13 @@ async def cb_cancel(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer("Отменено")
 
 
-@router.callback_query(F.data == "pair:start")
+@router.callback_query(F.data.in_({"pair:start", "pair:start_token"}))
 async def cb_start(call: CallbackQuery, state: FSMContext) -> None:
     if not allow_rate(call.from_user.id):
         await call.answer("Слишком часто. Подожди минуту.", show_alert=True)
         return
     await state.set_state(Pair.ssid)
+    await state.update_data(ask_token=call.data == "pair:start_token", token="")
     await call.message.edit_text(
         "<b>Шаг 1 из 3</b>\n\nПришли название сети (SSID) — точно как в списке Wi-Fi.",
         reply_markup=kb_cancel(),
@@ -408,8 +419,17 @@ async def step_password(message: Message, state: FSMContext) -> None:
 async def step_security(call: CallbackQuery, state: FSMContext) -> None:
     security = pairing.Security.WPA if call.data == "sec:wpa" else pairing.Security.WEP
     await state.update_data(security=int(security))
-    await call.message.edit_text("<b>Генерирую код…</b>")
-    await finish(call.message, state)
+    data = await state.get_data()
+    if data.get("ask_token"):
+        await state.set_state(Pair.token)
+        await call.message.edit_text(
+            "<b>Шаг 4 из 4</b>\n\nПришли xTokenCode из приложения.\n"
+            "Если не знаешь — пропусти, сгенерируем свой.",
+            reply_markup=kb_token_skip(),
+        )
+    else:
+        await call.message.edit_text("<b>Генерирую код…</b>")
+        await finish(call.message, state)
     await call.answer()
 
 
@@ -420,8 +440,15 @@ async def step_open(call: CallbackQuery, state: FSMContext) -> None:
         await call.answer("Сначала пришли SSID", show_alert=True)
         return
     await state.update_data(security=int(pairing.Security.OPEN), password="")
-    await call.message.edit_text("<b>Генерирую код…</b>")
-    await finish(call.message, state)
+    if data.get("ask_token"):
+        await state.set_state(Pair.token)
+        await call.message.edit_text(
+            "<b>Шаг 4 из 4</b>\n\nСеть открытая. Пришли xTokenCode или пропусти.",
+            reply_markup=kb_token_skip(),
+        )
+    else:
+        await call.message.edit_text("<b>Генерирую код…</b>")
+        await finish(call.message, state)
     await call.answer()
 
 
@@ -430,6 +457,29 @@ async def cb_delete(call: CallbackQuery) -> None:
     with suppress(Exception):
         await call.message.delete()
     await call.answer("Удалено")
+
+
+@router.message(Pair.token)
+async def step_token(message: Message, state: FSMContext) -> None:
+    await drop_user_message(message)
+    if not message.text:
+        await send_card(message, "Нужен текст — xTokenCode или «Пропустить».", kb_token_skip())
+        return
+    token = message.text.strip()
+    if len(token.encode()) > pairing.TOKEN_MAX:
+        await send_card(message, f"Токен длиннее {pairing.TOKEN_MAX} байт.", kb_token_skip())
+        return
+    await state.update_data(token=token)
+    await send_card(message, "<b>Генерирую код…</b>")
+    await finish(message, state)
+
+
+@router.callback_query(F.data == "pair:notoken")
+async def step_notoken(call: CallbackQuery, state: FSMContext) -> None:
+    await state.update_data(token="")
+    await call.message.edit_text("<b>Генерирую код…</b>")
+    await finish(call.message, state)
+    await call.answer()
 
 
 @router.callback_query(F.data.startswith("again:"))
