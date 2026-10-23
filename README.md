@@ -42,16 +42,6 @@ cp .env.example .env    # вписать BOT_TOKEN
 - `ALLOWED_IDS` — необязательно, ID пользователей через запятую
 - `RATE_LIMIT` — генераций на пользователя в минуту, по умолчанию 5
 
-## Деплой (pm2)
-
-```bash
-rsync -az --exclude .venv --exclude .env --exclude __pycache__ ./ user@host:~/quasar-connect-bot/
-ssh user@host 'cd ~/quasar-connect-bot && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt'
-ssh user@host 'cd ~/quasar-connect-bot && printf "BOT_TOKEN=...\n" > .env && chmod 600 .env'
-ssh user@host 'cd ~/quasar-connect-bot && pm2 start .venv/bin/python --name quasar-connect-bot -- bot.py && pm2 save'
-```
-
-
 ## Тесты
 
 ```bash
