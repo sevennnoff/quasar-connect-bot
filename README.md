@@ -68,4 +68,4 @@ ssh user@host 'cd ~/quasar-connect-bot && pm2 start .venv/bin/python --name quas
 
 ## Лицензия
 
-MIT
+GNU General Public License v3.0 — см. [LICENSE](LICENSE).
