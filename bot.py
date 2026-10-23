@@ -259,9 +259,9 @@ async def generate_and_send(message: Message, params: pairing.PairingParams, sta
     await state.clear()
 
     log.info(
-        "generated user=%s ssid=%r security=%s token=%s symbols=%d duration=%.1f",
+        "generated user=%s security=%s symbols=%d duration=%.1f",
         message.from_user.id if message.from_user else "?",
-        params.ssid, params.security.name, params.token[:8], rendered.symbols, rendered.duration,
+        params.security.name, rendered.symbols, rendered.duration,
     )
 
 
@@ -518,8 +518,8 @@ async def decode_incoming(message: Message, state: FSMContext) -> None:
         f"• Payload: <code>{decoded.payload.hex()}</code>"
     )
     await send_card(message, text, kb_decoded(key))
-    log.info("decoded chat=%s ssid=%r crc=%s errors=%d", message.chat.id,
-             decoded.params.ssid, decoded.crc_ok, decoded.errors)
+    log.info("decoded user=%s kind=%s crc=%s errors=%d", message.chat.id,
+             decoded.kind, decoded.crc_ok, decoded.errors)
 
 
 @router.message(StateFilter(None))
