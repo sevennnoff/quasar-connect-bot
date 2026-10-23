@@ -2,6 +2,8 @@
 
 Telegram-бот, который собирает **звуковой код сопряжения Yandex Station с Wi-Fi** и присылает его голосовым сообщением. Колонка принимает код микрофоном — телефон просто проигрывает звук рядом.
 
+**Бот:** [@quasarconnectbot](https://t.me/quasarconnectbot)
+
 Протокол восстановлен из приложения `com.yandex.iot` («Умный Дом», 26.18.0): `playPairingSound` → `PairingSoundController` → `fx1.a` → `dx1.d`.
 
 ## Возможности
